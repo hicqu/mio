@@ -1,4 +1,4 @@
-use {io, sys, Evented, EventSet, IpAddr, PollOpt, Selector, Token};
+use {io, sys, EventSet, Evented, IpAddr, PollOpt, Selector, Token};
 use std::net::SocketAddr;
 
 #[derive(Debug)]
@@ -9,14 +9,12 @@ pub struct UdpSocket {
 impl UdpSocket {
     /// Returns a new, unbound, non-blocking, IPv4 UDP socket
     pub fn v4() -> io::Result<UdpSocket> {
-        sys::UdpSocket::v4()
-            .map(From::from)
+        sys::UdpSocket::v4().map(From::from)
     }
 
     /// Returns a new, unbound, non-blocking, IPv6 UDP socket
     pub fn v6() -> io::Result<UdpSocket> {
-        sys::UdpSocket::v6()
-            .map(From::from)
+        sys::UdpSocket::v6().map(From::from)
     }
 
     pub fn bound(addr: &SocketAddr) -> io::Result<UdpSocket> {
@@ -41,17 +39,14 @@ impl UdpSocket {
     }
 
     pub fn try_clone(&self) -> io::Result<UdpSocket> {
-        self.sys.try_clone()
-            .map(From::from)
+        self.sys.try_clone().map(From::from)
     }
 
-    pub fn send_to(&self, buf: &[u8], target: &SocketAddr)
-                   -> io::Result<Option<usize>> {
+    pub fn send_to(&self, buf: &[u8], target: &SocketAddr) -> io::Result<Option<usize>> {
         self.sys.send_to(buf, target)
     }
 
-    pub fn recv_from(&self, buf: &mut [u8])
-                     -> io::Result<Option<(usize, SocketAddr)>> {
+    pub fn recv_from(&self, buf: &mut [u8]) -> io::Result<Option<(usize, SocketAddr)>> {
         self.sys.recv_from(buf)
     }
 
@@ -77,11 +72,23 @@ impl UdpSocket {
 }
 
 impl Evented for UdpSocket {
-    fn register(&self, selector: &mut Selector, token: Token, interest: EventSet, opts: PollOpt) -> io::Result<()> {
+    fn register(
+        &self,
+        selector: &mut Selector,
+        token: Token,
+        interest: EventSet,
+        opts: PollOpt,
+    ) -> io::Result<()> {
         self.sys.register(selector, token, interest, opts)
     }
 
-    fn reregister(&self, selector: &mut Selector, token: Token, interest: EventSet, opts: PollOpt) -> io::Result<()> {
+    fn reregister(
+        &self,
+        selector: &mut Selector,
+        token: Token,
+        interest: EventSet,
+        opts: PollOpt,
+    ) -> io::Result<()> {
         self.sys.reregister(selector, token, interest, opts)
     }
 
@@ -115,6 +122,8 @@ impl AsRawFd for UdpSocket {
 #[cfg(unix)]
 impl FromRawFd for UdpSocket {
     unsafe fn from_raw_fd(fd: RawFd) -> UdpSocket {
-        UdpSocket { sys: FromRawFd::from_raw_fd(fd) }
+        UdpSocket {
+            sys: FromRawFd::from_raw_fd(fd),
+        }
     }
 }

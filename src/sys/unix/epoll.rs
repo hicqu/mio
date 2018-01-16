@@ -15,7 +15,7 @@ static NEXT_ID: AtomicUsize = ATOMIC_USIZE_INIT;
 #[derive(Debug)]
 pub struct Selector {
     id: usize,
-    epfd: RawFd
+    epfd: RawFd,
 }
 
 impl Selector {
@@ -23,10 +23,7 @@ impl Selector {
         let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
         let epfd = try!(epoll_create().map_err(super::from_nix_error));
 
-        Ok(Selector {
-            id: id,
-            epfd: epfd,
-        })
+        Ok(Selector { id: id, epfd: epfd })
     }
 
     pub fn id(&self) -> usize {
@@ -35,48 +32,57 @@ impl Selector {
 
     /// Wait for events from the OS
     pub fn select(&mut self, evts: &mut Events, timeout_ms: Option<usize>) -> io::Result<()> {
-        use std::{cmp, i32, slice};
+        use std::{cmp, slice, i32};
 
         let timeout_ms = match timeout_ms {
             None => -1 as i32,
             Some(x) => cmp::min(i32::MAX as usize, x) as i32,
         };
 
-        let dst = unsafe {
-            slice::from_raw_parts_mut(
-                evts.events.as_mut_ptr(),
-                evts.events.capacity())
-        };
+        let dst =
+            unsafe { slice::from_raw_parts_mut(evts.events.as_mut_ptr(), evts.events.capacity()) };
 
         // Wait for epoll events for at most timeout_ms milliseconds
-        let cnt = try!(epoll_wait(self.epfd, dst, timeout_ms as isize)
-                           .map_err(super::from_nix_error));
+        let cnt =
+            try!(epoll_wait(self.epfd, dst, timeout_ms as isize).map_err(super::from_nix_error));
 
-        unsafe { evts.events.set_len(cnt); }
+        unsafe {
+            evts.events.set_len(cnt);
+        }
 
         Ok(())
     }
 
     /// Register event interests for the given IO handle with the OS
-    pub fn register(&mut self, fd: RawFd, token: Token, interests: EventSet, opts: PollOpt) -> io::Result<()> {
+    pub fn register(
+        &mut self,
+        fd: RawFd,
+        token: Token,
+        interests: EventSet,
+        opts: PollOpt,
+    ) -> io::Result<()> {
         let info = EpollEvent {
             events: ioevent_to_epoll(interests, opts),
-            data: token.as_usize() as u64
+            data: token.as_usize() as u64,
         };
 
-        epoll_ctl(self.epfd, EpollOp::EpollCtlAdd, fd, &info)
-            .map_err(super::from_nix_error)
+        epoll_ctl(self.epfd, EpollOp::EpollCtlAdd, fd, &info).map_err(super::from_nix_error)
     }
 
     /// Register event interests for the given IO handle with the OS
-    pub fn reregister(&mut self, fd: RawFd, token: Token, interests: EventSet, opts: PollOpt) -> io::Result<()> {
+    pub fn reregister(
+        &mut self,
+        fd: RawFd,
+        token: Token,
+        interests: EventSet,
+        opts: PollOpt,
+    ) -> io::Result<()> {
         let info = EpollEvent {
             events: ioevent_to_epoll(interests, opts),
-            data: token.as_usize() as u64
+            data: token.as_usize() as u64,
         };
 
-        epoll_ctl(self.epfd, EpollOp::EpollCtlMod, fd, &info)
-            .map_err(super::from_nix_error)
+        epoll_ctl(self.epfd, EpollOp::EpollCtlMod, fd, &info).map_err(super::from_nix_error)
     }
 
     /// Deregister event interests for the given IO handle with the OS
@@ -86,11 +92,10 @@ impl Selector {
         // For compatibility, we provide a dummy EpollEvent.
         let info = EpollEvent {
             events: EpollEventKind::empty(),
-            data: 0
+            data: 0,
         };
 
-        epoll_ctl(self.epfd, EpollOp::EpollCtlDel, fd, &info)
-            .map_err(super::from_nix_error)
+        epoll_ctl(self.epfd, EpollOp::EpollCtlDel, fd, &info).map_err(super::from_nix_error)
     }
 }
 

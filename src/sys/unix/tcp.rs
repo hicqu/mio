@@ -2,14 +2,14 @@ use io::MapNonBlock;
 use std::cell::Cell;
 use std::io::{Read, Write};
 use std::net::{self, SocketAddr};
-use std::os::unix::io::{RawFd, FromRawFd, AsRawFd};
+use std::os::unix::io::{AsRawFd, FromRawFd, RawFd};
 
 use libc;
-use net2::{TcpStreamExt, TcpListenerExt};
+use net2::TcpStreamExt;
 use nix::fcntl::FcntlArg::F_SETFL;
 use nix::fcntl::{fcntl, O_NONBLOCK};
 
-use {io, Evented, EventSet, PollOpt, Selector, Token, TryAccept};
+use {io, EventSet, Evented, PollOpt, Selector, Token};
 use sys::unix::eventedfd::EventedFd;
 
 #[derive(Debug)]
@@ -25,8 +25,9 @@ pub struct TcpListener {
 }
 
 fn set_nonblock(s: &AsRawFd) -> io::Result<()> {
-    fcntl(s.as_raw_fd(), F_SETFL(O_NONBLOCK)).map_err(super::from_nix_error)
-                                             .map(|_| ())
+    fcntl(s.as_raw_fd(), F_SETFL(O_NONBLOCK))
+        .map_err(super::from_nix_error)
+        .map(|_| ())
 }
 
 impl TcpStream {
@@ -75,11 +76,9 @@ impl TcpStream {
     }
 
     pub fn take_socket_error(&self) -> io::Result<()> {
-        self.inner.take_error().and_then(|e| {
-            match e {
-                Some(e) => Err(e),
-                None => Ok(())
-            }
+        self.inner.take_error().and_then(|e| match e {
+            Some(e) => Err(e),
+            None => Ok(()),
         })
     }
 
@@ -87,7 +86,10 @@ impl TcpStream {
         let selector_id = self.selector_id.get();
 
         if selector_id.is_some() && selector_id != Some(selector.id()) {
-            Err(io::Error::new(io::ErrorKind::Other, "socket already registered"))
+            Err(io::Error::new(
+                io::ErrorKind::Other,
+                "socket already registered",
+            ))
         } else {
             self.selector_id.set(Some(selector.id()));
             Ok(())
@@ -112,14 +114,24 @@ impl Write for TcpStream {
 }
 
 impl Evented for TcpStream {
-    fn register(&self, selector: &mut Selector, token: Token,
-                interest: EventSet, opts: PollOpt) -> io::Result<()> {
+    fn register(
+        &self,
+        selector: &mut Selector,
+        token: Token,
+        interest: EventSet,
+        opts: PollOpt,
+    ) -> io::Result<()> {
         try!(self.associate_selector(selector));
         EventedFd(&self.as_raw_fd()).register(selector, token, interest, opts)
     }
 
-    fn reregister(&self, selector: &mut Selector, token: Token,
-                  interest: EventSet, opts: PollOpt) -> io::Result<()> {
+    fn reregister(
+        &self,
+        selector: &mut Selector,
+        token: Token,
+        interest: EventSet,
+        opts: PollOpt,
+    ) -> io::Result<()> {
         EventedFd(&self.as_raw_fd()).reregister(selector, token, interest, opts)
     }
 
@@ -166,21 +178,25 @@ impl TcpListener {
     }
 
     pub fn accept(&self) -> io::Result<Option<(TcpStream, SocketAddr)>> {
-        self.inner.accept().and_then(|(s, a)| {
-            try!(set_nonblock(&s));
-            Ok((TcpStream {
-                inner: s,
-                selector_id: Cell::new(None),
-            }, a))
-        }).map_non_block()
+        self.inner
+            .accept()
+            .and_then(|(s, a)| {
+                try!(set_nonblock(&s));
+                Ok((
+                    TcpStream {
+                        inner: s,
+                        selector_id: Cell::new(None),
+                    },
+                    a,
+                ))
+            })
+            .map_non_block()
     }
 
     pub fn take_socket_error(&self) -> io::Result<()> {
-        self.inner.take_error().and_then(|e| {
-            match e {
-                Some(e) => Err(e),
-                None => Ok(())
-            }
+        self.inner.take_error().and_then(|e| match e {
+            Some(e) => Err(e),
+            None => Ok(()),
         })
     }
 
@@ -188,7 +204,10 @@ impl TcpListener {
         let selector_id = self.selector_id.get();
 
         if selector_id.is_some() && selector_id != Some(selector.id()) {
-            Err(io::Error::new(io::ErrorKind::Other, "socket already registered"))
+            Err(io::Error::new(
+                io::ErrorKind::Other,
+                "socket already registered",
+            ))
         } else {
             self.selector_id.set(Some(selector.id()));
             Ok(())
@@ -197,14 +216,24 @@ impl TcpListener {
 }
 
 impl Evented for TcpListener {
-    fn register(&self, selector: &mut Selector, token: Token,
-                interest: EventSet, opts: PollOpt) -> io::Result<()> {
+    fn register(
+        &self,
+        selector: &mut Selector,
+        token: Token,
+        interest: EventSet,
+        opts: PollOpt,
+    ) -> io::Result<()> {
         try!(self.associate_selector(selector));
         EventedFd(&self.as_raw_fd()).register(selector, token, interest, opts)
     }
 
-    fn reregister(&self, selector: &mut Selector, token: Token,
-                  interest: EventSet, opts: PollOpt) -> io::Result<()> {
+    fn reregister(
+        &self,
+        selector: &mut Selector,
+        token: Token,
+        interest: EventSet,
+        opts: PollOpt,
+    ) -> io::Result<()> {
         EventedFd(&self.as_raw_fd()).reregister(selector, token, interest, opts)
     }
 

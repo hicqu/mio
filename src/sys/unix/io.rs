@@ -1,4 +1,4 @@
-use {io, Evented, EventSet, PollOpt, Selector, Token};
+use {io, EventSet, Evented, PollOpt, Selector, Token};
 use std::io::{Read, Write};
 use std::os::unix::io::{AsRawFd, FromRawFd, RawFd};
 
@@ -38,11 +38,23 @@ impl AsRawFd for Io {
 }
 
 impl Evented for Io {
-    fn register(&self, selector: &mut Selector, token: Token, interest: EventSet, opts: PollOpt) -> io::Result<()> {
+    fn register(
+        &self,
+        selector: &mut Selector,
+        token: Token,
+        interest: EventSet,
+        opts: PollOpt,
+    ) -> io::Result<()> {
         selector.register(self.fd, token, interest, opts)
     }
 
-    fn reregister(&self, selector: &mut Selector, token: Token, interest: EventSet, opts: PollOpt) -> io::Result<()> {
+    fn reregister(
+        &self,
+        selector: &mut Selector,
+        token: Token,
+        interest: EventSet,
+        opts: PollOpt,
+    ) -> io::Result<()> {
         selector.reregister(self.fd, token, interest, opts)
     }
 
@@ -61,8 +73,7 @@ impl<'a> Read for &'a Io {
     fn read(&mut self, dst: &mut [u8]) -> io::Result<usize> {
         use nix::unistd::read;
 
-        read(self.as_raw_fd(), dst)
-            .map_err(super::from_nix_error)
+        read(self.as_raw_fd(), dst).map_err(super::from_nix_error)
     }
 }
 
@@ -80,8 +91,7 @@ impl<'a> Write for &'a Io {
     fn write(&mut self, src: &[u8]) -> io::Result<usize> {
         use nix::unistd::write;
 
-        write(self.as_raw_fd(), src)
-            .map_err(super::from_nix_error)
+        write(self.as_raw_fd(), src).map_err(super::from_nix_error)
     }
 
     fn flush(&mut self) -> io::Result<()> {

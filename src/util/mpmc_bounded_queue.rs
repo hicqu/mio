@@ -35,7 +35,7 @@ use std::sync::Arc;
 use std::cell::UnsafeCell;
 
 use std::sync::atomic::AtomicUsize;
-use std::sync::atomic::Ordering::{Relaxed, Release, Acquire};
+use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
 
 struct Node<T> {
     sequence: AtomicUsize,
@@ -61,6 +61,7 @@ unsafe impl<T: Sync> Sync for State<T> {}
 
 pub struct Queue<T> {
     state: Arc<State<T>>,
+    count: Arc<AtomicUsize>,
 }
 
 impl<T: Send> State<T> {
@@ -75,13 +76,18 @@ impl<T: Send> State<T> {
         } else {
             capacity
         };
-        let buffer = (0..capacity).map(|i| {
-            UnsafeCell::new(Node { sequence:AtomicUsize::new(i), value: None })
-        }).collect::<Vec<_>>();
-        State{
+        let buffer = (0..capacity)
+            .map(|i| {
+                UnsafeCell::new(Node {
+                    sequence: AtomicUsize::new(i),
+                    value: None,
+                })
+            })
+            .collect::<Vec<_>>();
+        State {
             pad0: [0; 64],
             buffer: buffer,
-            mask: capacity-1,
+            mask: capacity - 1,
             pad1: [0; 64],
             enqueue_pos: AtomicUsize::new(0),
             pad2: [0; 64],
@@ -99,13 +105,13 @@ impl<T: Send> State<T> {
             let diff: isize = seq as isize - pos as isize;
 
             if diff == 0 {
-                let enqueue_pos = self.enqueue_pos.compare_and_swap(pos, pos+1, Relaxed);
+                let enqueue_pos = self.enqueue_pos.compare_and_swap(pos, pos + 1, Relaxed);
                 if enqueue_pos == pos {
                     unsafe {
                         (*node.get()).value = Some(value);
-                        (*node.get()).sequence.store(pos+1, Release);
+                        (*node.get()).sequence.store(pos + 1, Release);
                     }
-                    break
+                    break;
                 } else {
                     pos = enqueue_pos;
                 }
@@ -126,18 +132,18 @@ impl<T: Send> State<T> {
             let seq = unsafe { (*node.get()).sequence.load(Acquire) };
             let diff: isize = seq as isize - (pos + 1) as isize;
             if diff == 0 {
-                let dequeue_pos = self.dequeue_pos.compare_and_swap(pos, pos+1, Relaxed);
+                let dequeue_pos = self.dequeue_pos.compare_and_swap(pos, pos + 1, Relaxed);
                 if dequeue_pos == pos {
                     unsafe {
                         let value = (*node.get()).value.take();
                         (*node.get()).sequence.store(pos + mask + 1, Release);
-                        return value
+                        return value;
                     }
                 } else {
                     pos = dequeue_pos;
                 }
             } else if diff < 0 {
-                return None
+                return None;
             } else {
                 pos = self.dequeue_pos.load(Relaxed);
             }
@@ -147,23 +153,37 @@ impl<T: Send> State<T> {
 
 impl<T: Send> Queue<T> {
     pub fn with_capacity(capacity: usize) -> Queue<T> {
-        Queue{
-            state: Arc::new(State::with_capacity(capacity))
+        Queue {
+            state: Arc::new(State::with_capacity(capacity)),
+            count: Arc::new(AtomicUsize::new(0)),
         }
     }
 
     pub fn push(&self, value: T) -> Result<(), T> {
-        self.state.push(value)
+        self.state.push(value).map(|r| {
+            self.count.fetch_add(1, Release);
+            r
+        })
     }
 
     pub fn pop(&self) -> Option<T> {
-        self.state.pop()
+        self.state.pop().map(|t| {
+            self.count.fetch_sub(1, Release);
+            t
+        })
+    }
+
+    pub fn count(&self) -> usize {
+        self.count.load(Acquire)
     }
 }
 
 impl<T: Send> Clone for Queue<T> {
     fn clone(&self) -> Queue<T> {
-        Queue { state: self.state.clone() }
+        Queue {
+            state: self.state.clone(),
+            count: self.count.clone(),
+        }
     }
 }
 
@@ -177,7 +197,7 @@ mod tests {
     fn test() {
         let nthreads = 8;
         let nmsgs = 1000;
-        let q = Queue::with_capacity(nthreads*nmsgs);
+        let q = Queue::with_capacity(nthreads * nmsgs);
         assert_eq!(None, q.pop());
         let (tx, rx) = channel();
 
@@ -203,10 +223,12 @@ mod tests {
                 let mut i = 0;
                 loop {
                     match q.pop() {
-                        None => {},
+                        None => {}
                         Some(_) => {
                             i += 1;
-                            if i == nmsgs { break }
+                            if i == nmsgs {
+                                break;
+                            }
                         }
                     }
                 }

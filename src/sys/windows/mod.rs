@@ -149,12 +149,13 @@ mod buffer_pool;
 
 pub use self::awakener::Awakener;
 pub use self::selector::{Events, Selector};
-pub use self::tcp::{TcpStream, TcpListener};
+pub use self::tcp::{TcpListener, TcpStream};
 pub use self::udp::UdpSocket;
 
 #[derive(Copy, Clone)]
 enum Family {
-    V4, V6,
+    V4,
+    V6,
 }
 
 fn bad_state() -> io::Error {
@@ -165,4 +166,6 @@ fn wouldblock() -> io::Error {
     io::Error::new(io::ErrorKind::WouldBlock, "operation would block")
 }
 
-fn ipv4_any() -> Ipv4Addr { Ipv4Addr::new(0, 0, 0, 0) }
+fn ipv4_any() -> Ipv4Addr {
+    Ipv4Addr::new(0, 0, 0, 0)
+}

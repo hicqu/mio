@@ -1,7 +1,7 @@
 use token::Token;
 use util::Slab;
 use time::precise_time_ns;
-use std::{usize, iter};
+use std::{iter, usize};
 use std::cmp::max;
 
 use self::TimerErrorKind::TimerOverflow;
@@ -55,7 +55,7 @@ impl<T> Timer<T> {
             start: 0,
             tick: 0,
             next: EMPTY,
-            mask: (slots as u64) - 1
+            mask: (slots as u64) - 1,
         }
     }
 
@@ -125,7 +125,7 @@ impl<T> Timer<T> {
     pub fn clear(&mut self, timeout: Timeout) -> bool {
         let links = match self.entries.get(timeout.token) {
             Some(e) => e.links,
-            None => return false
+            None => return false,
         };
 
         // Sanity check
@@ -145,8 +145,10 @@ impl<T> Timer<T> {
 
         // Insert the new entry
         let token = try!(
-            self.entries.insert(Entry::new(token, tick, curr))
-            .map_err(|_| TimerError::overflow()));
+            self.entries
+                .insert(Entry::new(token, tick, curr))
+                .map_err(|_| TimerError::overflow())
+        );
 
         if curr != EMPTY {
             // If there was a previous entry, set its prev pointer to the new
@@ -162,13 +164,16 @@ impl<T> Timer<T> {
         // Return the new timeout
         Ok(Timeout {
             token: token,
-            tick: tick
+            tick: tick,
         })
     }
 
     fn unlink(&mut self, links: &EntryLinks, token: Token) {
-       trace!("unlinking timeout; slot={}; token={:?}",
-               self.slot_for(links.tick), token);
+        trace!(
+            "unlinking timeout; slot={}; token={:?}",
+            self.slot_for(links.tick),
+            token
+        );
 
         if links.prev == EMPTY {
             let slot = self.slot_for(links.tick);
@@ -219,8 +224,7 @@ impl<T> Timer<T> {
                     self.unlink(&links, curr);
 
                     // Remove and return the token
-                    return self.entries.remove(curr)
-                        .map(|e| e.token);
+                    return self.entries.remove(curr).map(|e| e.token);
                 } else {
                     self.next = links.next;
                 }
@@ -283,7 +287,7 @@ impl<T> Entry<T> {
 struct EntryLinks {
     tick: u64,
     prev: Token,
-    next: Token
+    next: Token,
 }
 
 pub type TimerResult<T> = Result<T, TimerError>;
@@ -298,7 +302,7 @@ impl TimerError {
     fn overflow() -> TimerError {
         TimerError {
             kind: TimerOverflow,
-            desc: "too many timer entries"
+            desc: "too many timer entries",
         }
     }
 }

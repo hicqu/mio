@@ -1,16 +1,28 @@
-use {EventSet, Selector, PollOpt, Token};
+use {EventSet, PollOpt, Selector, Token};
 use bytes::{Buf, MutBuf};
 
 // Re-export the io::Result / Error types for convenience
-pub use std::io::{Read, Write, Result, Error, ErrorKind};
+pub use std::io::{Error, ErrorKind, Read, Result, Write};
 
 /// A value that may be registered with an `EventLoop`
 pub trait Evented {
     #[doc(hidden)]
-    fn register(&self, selector: &mut Selector, token: Token, interest: EventSet, opts: PollOpt) -> Result<()>;
+    fn register(
+        &self,
+        selector: &mut Selector,
+        token: Token,
+        interest: EventSet,
+        opts: PollOpt,
+    ) -> Result<()>;
 
     #[doc(hidden)]
-    fn reregister(&self, selector: &mut Selector, token: Token, interest: EventSet, opts: PollOpt) -> Result<()>;
+    fn reregister(
+        &self,
+        selector: &mut Selector,
+        token: Token,
+        interest: EventSet,
+        opts: PollOpt,
+    ) -> Result<()>;
 
     #[doc(hidden)]
     fn deregister(&self, selector: &mut Selector) -> Result<()>;
@@ -18,7 +30,8 @@ pub trait Evented {
 
 pub trait TryRead {
     fn try_read_buf<B: MutBuf>(&mut self, buf: &mut B) -> Result<Option<usize>>
-        where Self : Sized
+    where
+        Self: Sized,
     {
         // Reads the length of the slice supplied by buf.mut_bytes into the buffer
         // This is not guaranteed to consume an entire datagram or segment.
@@ -28,7 +41,9 @@ pub trait TryRead {
         let res = self.try_read(unsafe { buf.mut_bytes() });
 
         if let Ok(Some(cnt)) = res {
-            unsafe { buf.advance(cnt); }
+            unsafe {
+                buf.advance(cnt);
+            }
         }
 
         res
@@ -39,7 +54,8 @@ pub trait TryRead {
 
 pub trait TryWrite {
     fn try_write_buf<B: Buf>(&mut self, buf: &mut B) -> Result<Option<usize>>
-        where Self : Sized
+    where
+        Self: Sized,
     {
         let res = self.try_write(buf.bytes());
 
@@ -90,13 +106,11 @@ impl<T> MapNonBlock<T> for Result<T> {
 
         match self {
             Ok(value) => Ok(Some(value)),
-            Err(err) => {
-                if let WouldBlock = err.kind() {
-                    Ok(None)
-                } else {
-                    Err(err)
-                }
-            }
+            Err(err) => if let WouldBlock = err.kind() {
+                Ok(None)
+            } else {
+                Err(err)
+            },
         }
     }
 }

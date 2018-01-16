@@ -1,8 +1,9 @@
 use {io, EventSet, PollOpt, Token};
 use event::IoEvent;
-use nix::sys::event::{EventFilter, EventFlag, FilterFlag, KEvent, kqueue, kevent, kevent_ts};
-use nix::sys::event::{EV_ADD, EV_CLEAR, EV_DELETE, EV_DISABLE, EV_ENABLE, EV_EOF, EV_ERROR, EV_ONESHOT};
-use libc::{timespec, time_t, c_long};
+use nix::sys::event::{kevent, kevent_ts, kqueue, EventFilter, EventFlag, FilterFlag, KEvent};
+use nix::sys::event::{EV_ADD, EV_CLEAR, EV_DELETE, EV_DISABLE, EV_ENABLE, EV_EOF, EV_ERROR,
+                      EV_ONESHOT};
+use libc::{c_long, time_t, timespec};
 use std::{fmt, slice};
 use std::os::unix::io::RawFd;
 use std::collections::HashMap;
@@ -19,7 +20,7 @@ static NEXT_ID: AtomicUsize = ATOMIC_USIZE_INIT;
 pub struct Selector {
     id: usize,
     kq: RawFd,
-    changes: Events
+    changes: Events,
 }
 
 impl Selector {
@@ -30,7 +31,7 @@ impl Selector {
         Ok(Selector {
             id: id,
             kq: kq,
-            changes: Events::new()
+            changes: Events::new(),
         })
     }
 
@@ -39,13 +40,16 @@ impl Selector {
     }
 
     pub fn select(&mut self, evts: &mut Events, timeout_ms: Option<usize>) -> io::Result<()> {
-        let timeout = timeout_ms.map(|x| timespec {
-            tv_sec: (x / 1000) as time_t,
-            tv_nsec: ((x % 1000) * 1_000_000) as c_long
+        let timeout = timeout_ms.map(|x| {
+            timespec {
+                tv_sec: (x / 1000) as time_t,
+                tv_nsec: ((x % 1000) * 1_000_000) as c_long,
+            }
         });
 
-        let cnt = try!(kevent_ts(self.kq, &[], evts.as_mut_slice(), timeout)
-                                  .map_err(super::from_nix_error));
+        let cnt = try!(
+            kevent_ts(self.kq, &[], evts.as_mut_slice(), timeout).map_err(super::from_nix_error)
+        );
 
         self.changes.sys_events.clear();
 
@@ -58,16 +62,40 @@ impl Selector {
         Ok(())
     }
 
-    pub fn register(&mut self, fd: RawFd, token: Token, interests: EventSet, opts: PollOpt) -> io::Result<()> {
+    pub fn register(
+        &mut self,
+        fd: RawFd,
+        token: Token,
+        interests: EventSet,
+        opts: PollOpt,
+    ) -> io::Result<()> {
         trace!("registering; token={:?}; interests={:?}", token, interests);
 
-        self.ev_register(fd, token.as_usize(), EventFilter::EVFILT_READ, interests.contains(EventSet::readable()), opts);
-        self.ev_register(fd, token.as_usize(), EventFilter::EVFILT_WRITE, interests.contains(EventSet::writable()), opts);
+        self.ev_register(
+            fd,
+            token.as_usize(),
+            EventFilter::EVFILT_READ,
+            interests.contains(EventSet::readable()),
+            opts,
+        );
+        self.ev_register(
+            fd,
+            token.as_usize(),
+            EventFilter::EVFILT_WRITE,
+            interests.contains(EventSet::writable()),
+            opts,
+        );
 
         self.flush_changes()
     }
 
-    pub fn reregister(&mut self, fd: RawFd, token: Token, interests: EventSet, opts: PollOpt) -> io::Result<()> {
+    pub fn reregister(
+        &mut self,
+        fd: RawFd,
+        token: Token,
+        interests: EventSet,
+        opts: PollOpt,
+    ) -> io::Result<()> {
         // Just need to call register here since EV_ADD is a mod if already
         // registered
         self.register(fd, token, interests, opts)
@@ -80,7 +108,14 @@ impl Selector {
         self.flush_changes()
     }
 
-    fn ev_register(&mut self, fd: RawFd, token: usize, filter: EventFilter, enable: bool, opts: PollOpt) {
+    fn ev_register(
+        &mut self,
+        fd: RawFd,
+        token: usize,
+        filter: EventFilter,
+        enable: bool,
+        opts: PollOpt,
+    ) {
         let mut flags = EV_ADD;
 
         if enable {
@@ -102,33 +137,33 @@ impl Selector {
 
     #[cfg(not(target_os = "netbsd"))]
     fn ev_push(&mut self, fd: RawFd, token: usize, filter: EventFilter, flags: EventFlag) {
-        self.changes.sys_events.push(
-            KEvent {
-                ident: fd as ::libc::uintptr_t,
-                filter: filter,
-                flags: flags,
-                fflags: FilterFlag::empty(),
-                data: 0,
-                udata: token
-            });
+        self.changes.sys_events.push(KEvent {
+            ident: fd as ::libc::uintptr_t,
+            filter: filter,
+            flags: flags,
+            fflags: FilterFlag::empty(),
+            data: 0,
+            udata: token,
+        });
     }
 
     #[cfg(target_os = "netbsd")]
     fn ev_push(&mut self, fd: RawFd, token: usize, filter: EventFilter, flags: EventFlag) {
-        self.changes.sys_events.push(
-            KEvent {
-                ident: fd as ::libc::uintptr_t,
-                filter: filter,
-                flags: flags,
-                fflags: FilterFlag::empty(),
-                data: 0,
-                udata: token as i64
-            });
+        self.changes.sys_events.push(KEvent {
+            ident: fd as ::libc::uintptr_t,
+            filter: filter,
+            flags: flags,
+            fflags: FilterFlag::empty(),
+            data: 0,
+            udata: token as i64,
+        });
     }
 
     fn flush_changes(&mut self) -> io::Result<()> {
-        let result = kevent(self.kq, self.changes.as_slice(), &mut [], 0).map(|_| ())
-            .map_err(super::from_nix_error).map(|_| ());
+        let result = kevent(self.kq, self.changes.as_slice(), &mut [], 0)
+            .map(|_| ())
+            .map_err(super::from_nix_error)
+            .map(|_| ());
 
         self.changes.sys_events.clear();
         result
@@ -146,7 +181,7 @@ impl Events {
         Events {
             sys_events: Vec::with_capacity(1024),
             events: Vec::with_capacity(1024),
-            event_map: HashMap::with_capacity(1024)
+            event_map: HashMap::with_capacity(1024),
         }
     }
 
@@ -167,8 +202,7 @@ impl Events {
             let token = Token(e.udata as usize);
             let len = self.events.len();
 
-            let idx = *self.event_map.entry(token)
-                .or_insert(len);
+            let idx = *self.event_map.entry(token).or_insert(len);
 
             if idx == len {
                 // New entry, insert the default

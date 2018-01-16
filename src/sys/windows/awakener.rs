@@ -1,6 +1,6 @@
 use std::sync::{Mutex, MutexGuard};
 
-use {io, Evented, EventSet, PollOpt, Selector, Token};
+use {io, EventSet, Evented, PollOpt, Selector, Token};
 use sys::windows::selector::Registration;
 use miow::iocp::CompletionStatus;
 
@@ -24,8 +24,7 @@ impl Awakener {
         // succeed.
         let iocp = self.iocp();
         if let Some(port) = iocp.port() {
-            let status = CompletionStatus::new(0, iocp.token().as_usize(),
-                                               0 as *mut _);
+            let status = CompletionStatus::new(0, iocp.token().as_usize(), 0 as *mut _);
             try!(port.post(status));
         }
         Ok(())
@@ -41,14 +40,24 @@ impl Awakener {
 }
 
 impl Evented for Awakener {
-    fn register(&self, selector: &mut Selector, token: Token, _events: EventSet,
-                _opts: PollOpt) -> io::Result<()> {
+    fn register(
+        &self,
+        selector: &mut Selector,
+        token: Token,
+        _events: EventSet,
+        _opts: PollOpt,
+    ) -> io::Result<()> {
         self.iocp().associate(selector, token);
         Ok(())
     }
 
-    fn reregister(&self, selector: &mut Selector, token: Token, events: EventSet,
-                  opts: PollOpt) -> io::Result<()> {
+    fn reregister(
+        &self,
+        selector: &mut Selector,
+        token: Token,
+        events: EventSet,
+        opts: PollOpt,
+    ) -> io::Result<()> {
         self.register(selector, token, events, opts)
     }
 

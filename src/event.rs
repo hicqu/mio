@@ -117,11 +117,14 @@ impl fmt::Debug for PollOpt {
         let flags = [
             (PollOpt::edge(), "Edge-Triggered"),
             (PollOpt::level(), "Level-Triggered"),
-            (PollOpt::oneshot(), "OneShot")];
+            (PollOpt::oneshot(), "OneShot"),
+        ];
 
         for &(flag, msg) in flags.iter() {
             if self.contains(flag) {
-                if one { try!(write!(fmt, " | ")) }
+                if one {
+                    try!(write!(fmt, " | "))
+                }
                 try!(write!(fmt, "{}", msg));
 
                 one = true
@@ -162,10 +165,7 @@ impl EventSet {
 
     #[inline]
     pub fn all() -> EventSet {
-        EventSet::readable() |
-            EventSet::writable() |
-            EventSet::hup() |
-            EventSet::error()
+        EventSet::readable() | EventSet::writable() | EventSet::hup() | EventSet::error()
     }
 
     #[inline]
@@ -260,12 +260,15 @@ impl fmt::Debug for EventSet {
         let flags = [
             (EventSet::readable(), "Readable"),
             (EventSet::writable(), "Writable"),
-            (EventSet::error(),    "Error"),
-            (EventSet::hup(),      "Hup")];
+            (EventSet::error(), "Error"),
+            (EventSet::hup(), "Hup"),
+        ];
 
         for &(flag, msg) in flags.iter() {
             if self.contains(flag) {
-                if one { try!(write!(fmt, " | ")) }
+                if one {
+                    try!(write!(fmt, " | "))
+                }
                 try!(write!(fmt, "{}", msg));
 
                 one = true
@@ -280,7 +283,7 @@ impl fmt::Debug for EventSet {
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct IoEvent {
     pub kind: EventSet,
-    pub token: Token
+    pub token: Token,
 }
 
 /// IoEvent represents the raw event that the OS-specific selector

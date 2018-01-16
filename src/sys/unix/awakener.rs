@@ -2,7 +2,7 @@ pub use self::pipe::Awakener;
 
 /// Default *nix awakener implementation
 mod pipe {
-    use {io, Evented, EventSet, PollOpt, Selector, Token, TryRead, TryWrite};
+    use {io, EventSet, Evented, PollOpt, Selector, Token, TryRead, TryWrite};
     use unix::{self, PipeReader, PipeWriter};
 
     /*
@@ -36,7 +36,7 @@ mod pipe {
             loop {
                 // Consume data until all bytes are purged
                 match (&self.reader).try_read(&mut buf) {
-                    Ok(Some(i)) if i > 0 => {},
+                    Ok(Some(i)) if i > 0 => {}
                     _ => return,
                 }
             }
@@ -48,11 +48,23 @@ mod pipe {
     }
 
     impl Evented for Awakener {
-        fn register(&self, selector: &mut Selector, token: Token, interest: EventSet, opts: PollOpt) -> io::Result<()> {
+        fn register(
+            &self,
+            selector: &mut Selector,
+            token: Token,
+            interest: EventSet,
+            opts: PollOpt,
+        ) -> io::Result<()> {
             self.reader().register(selector, token, interest, opts)
         }
 
-        fn reregister(&self, selector: &mut Selector, token: Token, interest: EventSet, opts: PollOpt) -> io::Result<()> {
+        fn reregister(
+            &self,
+            selector: &mut Selector,
+            token: Token,
+            interest: EventSet,
+            opts: PollOpt,
+        ) -> io::Result<()> {
             self.reader().reregister(selector, token, interest, opts)
         }
 

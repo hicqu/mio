@@ -1,9 +1,9 @@
-use {io, Evented, EventSet, Io, PollOpt, Selector, Token, TryAccept};
+use {io, EventSet, Evented, Io, PollOpt, Selector, Token, TryAccept};
 use io::MapNonBlock;
 use sys::unix::{net, nix, Socket};
 use std::io::{Read, Write};
 use std::path::Path;
-use std::os::unix::io::{RawFd, AsRawFd, FromRawFd};
+use std::os::unix::io::{AsRawFd, FromRawFd, RawFd};
 use nix::sys::socket::MsgFlags;
 
 #[derive(Debug)]
@@ -44,15 +44,20 @@ impl UnixSocket {
     }
 
     pub fn try_clone(&self) -> io::Result<UnixSocket> {
-        net::dup(&self.io)
-            .map(From::from)
+        net::dup(&self.io).map(From::from)
     }
 
     pub fn read_recv_fd(&mut self, buf: &mut [u8]) -> io::Result<(usize, Option<RawFd>)> {
         let iov = [nix::IoVec::from_mut_slice(buf)];
         let mut cmsgspace: nix::CmsgSpace<[RawFd; 1]> = nix::CmsgSpace::new();
-        let msg = try!(nix::recvmsg(self.io.as_raw_fd(), &iov, Some(&mut cmsgspace), MsgFlags::empty())
-                           .map_err(super::from_nix_error));
+        let msg = try!(
+            nix::recvmsg(
+                self.io.as_raw_fd(),
+                &iov,
+                Some(&mut cmsgspace),
+                MsgFlags::empty()
+            ).map_err(super::from_nix_error)
+        );
         let mut fd = None;
         for cmsg in msg.cmsgs() {
             if let nix::ControlMessage::ScmRights(fds) = cmsg {
@@ -70,7 +75,7 @@ impl UnixSocket {
         let iov = [nix::IoVec::from_slice(buf)];
         let fds = [fd];
         let cmsg = nix::ControlMessage::ScmRights(&fds);
-        nix::sendmsg(self.io.as_raw_fd(),&iov, &[cmsg], MsgFlags::empty(), None)
+        nix::sendmsg(self.io.as_raw_fd(), &iov, &[cmsg], MsgFlags::empty(), None)
             .map_err(super::from_nix_error)
     }
 }
@@ -92,11 +97,23 @@ impl Write for UnixSocket {
 }
 
 impl Evented for UnixSocket {
-    fn register(&self, selector: &mut Selector, token: Token, interest: EventSet, opts: PollOpt) -> io::Result<()> {
+    fn register(
+        &self,
+        selector: &mut Selector,
+        token: Token,
+        interest: EventSet,
+        opts: PollOpt,
+    ) -> io::Result<()> {
         self.io.register(selector, token, interest, opts)
     }
 
-    fn reregister(&self, selector: &mut Selector, token: Token, interest: EventSet, opts: PollOpt) -> io::Result<()> {
+    fn reregister(
+        &self,
+        selector: &mut Selector,
+        token: Token,
+        interest: EventSet,
+        opts: PollOpt,
+    ) -> io::Result<()> {
         self.io.reregister(selector, token, interest, opts)
     }
 
@@ -113,8 +130,7 @@ impl TryAccept for UnixSocket {
     }
 }
 
-impl Socket for UnixSocket {
-}
+impl Socket for UnixSocket {}
 
 impl From<Io> for UnixSocket {
     fn from(io: Io) -> UnixSocket {
@@ -124,7 +140,9 @@ impl From<Io> for UnixSocket {
 
 impl FromRawFd for UnixSocket {
     unsafe fn from_raw_fd(fd: RawFd) -> UnixSocket {
-        UnixSocket { io: Io::from_raw_fd(fd) }
+        UnixSocket {
+            io: Io::from_raw_fd(fd),
+        }
     }
 }
 
@@ -135,6 +153,5 @@ impl AsRawFd for UnixSocket {
 }
 
 fn to_nix_addr<P: AsRef<Path> + ?Sized>(path: &P) -> io::Result<nix::SockAddr> {
-    nix::SockAddr::new_unix(path.as_ref())
-        .map_err(super::from_nix_error)
+    nix::SockAddr::new_unix(path.as_ref()).map_err(super::from_nix_error)
 }

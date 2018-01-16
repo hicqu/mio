@@ -17,7 +17,7 @@ use miow::iocp::CompletionStatus;
 use miow::net::SocketAddrBuf;
 use miow::net::UdpSocketExt as MiowUdpSocketExt;
 
-use {Evented, EventSet, IpAddr, PollOpt, Selector, Token};
+use {EventSet, Evented, IpAddr, PollOpt, Selector, Token};
 use event::IoEvent;
 use sys::windows::selector::{Overlapped, Registration};
 use sys::windows::from_raw_arc::FromRawArc;
@@ -62,16 +62,12 @@ enum State<T, U> {
 
 impl UdpSocket {
     pub fn v4() -> io::Result<UdpSocket> {
-        UdpBuilder::new_v4().map(|u| {
-            UdpSocket::new(Socket::Building(u), Family::V4)
-        })
+        UdpBuilder::new_v4().map(|u| UdpSocket::new(Socket::Building(u), Family::V4))
     }
 
     /// Returns a new, unbound, non-blocking, IPv6 UDP socket
     pub fn v6() -> io::Result<UdpSocket> {
-        UdpBuilder::new_v6().map(|u| {
-            UdpSocket::new(Socket::Building(u), Family::V6)
-        })
+        UdpBuilder::new_v6().map(|u| UdpSocket::new(Socket::Building(u), Family::V6))
     }
 
     fn new(socket: Socket, fam: Family) -> UdpSocket {
@@ -106,9 +102,9 @@ impl UdpSocket {
 
     pub fn try_clone(&self) -> io::Result<UdpSocket> {
         let me = self.inner();
-        try!(me.socket.socket()).try_clone().map(|s| {
-            UdpSocket::new(Socket::Bound(s), me.family)
-        })
+        try!(me.socket.socket())
+            .try_clone()
+            .map(|s| UdpSocket::new(Socket::Bound(s), me.family))
     }
 
     /// Note that unlike `TcpStream::write` this function will not attempt to
@@ -117,8 +113,7 @@ impl UdpSocket {
     /// TODO: This... may be wrong in the long run. We're reporting that we
     ///       successfully wrote all of the bytes in `buf` but it's possible
     ///       that we don't actually end up writing all of them!
-    pub fn send_to(&self, buf: &[u8], target: &SocketAddr)
-                   -> io::Result<Option<usize>> {
+    pub fn send_to(&self, buf: &[u8], target: &SocketAddr) -> io::Result<Option<usize>> {
         let mut me = self.inner();
         let me = &mut *me;
 
@@ -129,7 +124,7 @@ impl UdpSocket {
 
         let s = try!(me.socket.socket());
         if me.iocp.port().is_none() {
-            return Ok(None)
+            return Ok(None);
         }
 
         me.iocp.unset_readiness(EventSet::writable());
@@ -138,20 +133,21 @@ impl UdpSocket {
         let amt = try!(owned_buf.write(buf));
         try!(unsafe {
             trace!("scheduling a send");
-            s.send_to_overlapped(&owned_buf, target,
-                                 self.imp.inner.write.get_mut())
+            s.send_to_overlapped(&owned_buf, target, self.imp.inner.write.get_mut())
         });
         me.write = State::Pending(owned_buf);
         mem::forget(self.imp.clone());
         Ok(Some(amt))
     }
 
-    pub fn recv_from(&self, mut buf: &mut [u8])
-                     -> io::Result<Option<(usize, SocketAddr)>> {
+    pub fn recv_from(&self, mut buf: &mut [u8]) -> io::Result<Option<(usize, SocketAddr)>> {
         let mut me = self.inner();
         match mem::replace(&mut me.read, State::Empty) {
             State::Empty => Ok(None),
-            State::Pending(b) => { me.read = State::Pending(b); Ok(None) }
+            State::Pending(b) => {
+                me.read = State::Pending(b);
+                Ok(None)
+            }
             State::Ready(data) => {
                 // If we weren't provided enough space to receive the message
                 // then don't actually read any data, just return an error.
@@ -163,8 +159,10 @@ impl UdpSocket {
                         buf.write(&data).unwrap();
                         Ok(Some((data.len(), addr)))
                     } else {
-                        Err(io::Error::new(io::ErrorKind::Other,
-                                           "failed to parse socket address"))
+                        Err(io::Error::new(
+                            io::ErrorKind::Other,
+                            "failed to parse socket address",
+                        ))
                     };
                     me.iocp.put_buffer(data);
                     self.imp.schedule_read(&mut me);
@@ -195,12 +193,8 @@ impl UdpSocket {
         let me = self.inner();
         let socket = try!(me.socket.socket());
         match *multi {
-            IpAddr::V4(ref v4) => {
-                socket.join_multicast_v4(v4, &super::ipv4_any())
-            }
-            IpAddr::V6(ref v6) => {
-                socket.join_multicast_v6(v6, 0)
-            }
+            IpAddr::V4(ref v4) => socket.join_multicast_v4(v4, &super::ipv4_any()),
+            IpAddr::V6(ref v6) => socket.join_multicast_v6(v6, 0),
         }
     }
 
@@ -208,9 +202,7 @@ impl UdpSocket {
         let me = self.inner();
         let socket = try!(me.socket.socket());
         match *multi {
-            IpAddr::V4(ref v4) => {
-                socket.leave_multicast_v4(v4, &super::ipv4_any())
-            }
+            IpAddr::V4(ref v4) => socket.leave_multicast_v4(v4, &super::ipv4_any()),
             IpAddr::V6(ref v6) => socket.leave_multicast_v6(v6, 0),
         }
     }
@@ -249,8 +241,7 @@ impl Imp {
             _ => return,
         }
         let socket = match me.socket {
-            Socket::Empty |
-            Socket::Building(..) => return,
+            Socket::Empty | Socket::Building(..) => return,
             Socket::Bound(ref s) => s,
         };
 
@@ -261,8 +252,7 @@ impl Imp {
             trace!("scheduling a read");
             let cap = buf.capacity();
             buf.set_len(cap);
-            socket.recv_from_overlapped(&mut buf, &mut me.read_buf,
-                                        self.inner.read.get_mut())
+            socket.recv_from_overlapped(&mut buf, &mut me.read_buf, self.inner.read.get_mut())
         };
         match res {
             Ok(_) => {
@@ -280,15 +270,20 @@ impl Imp {
     // See comments in tcp::StreamImp::push
     fn push(&self, me: &mut Inner, set: EventSet, into: &mut Vec<IoEvent>) {
         if let Socket::Empty = me.socket {
-            return
+            return;
         }
         me.iocp.push_event(set, into);
     }
 }
 
 impl Evented for UdpSocket {
-    fn register(&self, selector: &mut Selector, token: Token,
-                interest: EventSet, opts: PollOpt) -> io::Result<()> {
+    fn register(
+        &self,
+        selector: &mut Selector,
+        token: Token,
+        interest: EventSet,
+        opts: PollOpt,
+    ) -> io::Result<()> {
         let mut me = self.inner();
         {
             let me = &mut *me;
@@ -297,15 +292,22 @@ impl Evented for UdpSocket {
                 Socket::Building(ref b) => b as &AsRawSocket,
                 Socket::Empty => return Err(bad_state()),
             };
-            try!(me.iocp.register_socket(socket, selector, token, interest,
-                                         opts));
+            try!(
+                me.iocp
+                    .register_socket(socket, selector, token, interest, opts)
+            );
         }
         self.post_register(interest, &mut me);
         Ok(())
     }
 
-    fn reregister(&self, selector: &mut Selector, token: Token,
-                  interest: EventSet, opts: PollOpt) -> io::Result<()> {
+    fn reregister(
+        &self,
+        selector: &mut Selector,
+        token: Token,
+        interest: EventSet,
+        opts: PollOpt,
+    ) -> io::Result<()> {
         let mut me = self.inner();
         {
             let me = &mut *me;
@@ -314,8 +316,10 @@ impl Evented for UdpSocket {
                 Socket::Building(ref b) => b as &AsRawSocket,
                 Socket::Empty => return Err(bad_state()),
             };
-            try!(me.iocp.reregister_socket(socket, selector, token, interest,
-                                           opts));
+            try!(
+                me.iocp
+                    .reregister_socket(socket, selector, token, interest, opts)
+            );
         }
         self.post_register(interest, &mut me);
         Ok(())

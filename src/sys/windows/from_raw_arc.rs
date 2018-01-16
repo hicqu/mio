@@ -27,8 +27,8 @@ pub struct FromRawArc<T> {
     _inner: *mut Inner<T>,
 }
 
-unsafe impl<T: Sync + Send> Send for FromRawArc<T> { }
-unsafe impl<T: Sync + Send> Sync for FromRawArc<T> { }
+unsafe impl<T: Sync + Send> Send for FromRawArc<T> {}
+unsafe impl<T: Sync + Send> Sync for FromRawArc<T> {}
 
 #[repr(C)]
 struct Inner<T> {
@@ -42,14 +42,18 @@ impl<T> FromRawArc<T> {
             data: data,
             cnt: AtomicUsize::new(1),
         });
-        FromRawArc { _inner: unsafe { mem::transmute(x) } }
+        FromRawArc {
+            _inner: unsafe { mem::transmute(x) },
+        }
     }
 
     pub unsafe fn from_raw(ptr: *mut T) -> FromRawArc<T> {
         // Note that if we could use `mem::transmute` here to get a libstd Arc
         // (guaranteed) then we could just use std::sync::Arc, but this is the
         // crucial reason this currently exists.
-        FromRawArc { _inner: ptr as *mut Inner<T> }
+        FromRawArc {
+            _inner: ptr as *mut Inner<T>,
+        }
     }
 }
 
@@ -61,7 +65,9 @@ impl<T> Clone for FromRawArc<T> {
         unsafe {
             (*self._inner).cnt.fetch_add(1, Ordering::Relaxed);
         }
-        FromRawArc { _inner: self._inner }
+        FromRawArc {
+            _inner: self._inner,
+        }
     }
 }
 
@@ -78,7 +84,7 @@ impl<T> Drop for FromRawArc<T> {
         unsafe {
             // Atomic orderings lifted from the standard library
             if (*self._inner).cnt.fetch_sub(1, Ordering::Release) != 1 {
-                return
+                return;
             }
             atomic::fence(Ordering::Acquire);
             drop(mem::transmute::<_, Box<T>>(self._inner));

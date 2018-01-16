@@ -10,8 +10,8 @@ use winapi::*;
 use miow;
 use miow::iocp::{CompletionPort, CompletionStatus};
 
-use {Token, PollOpt};
-use event::{IoEvent, EventSet};
+use {PollOpt, Token};
+use event::{EventSet, IoEvent};
 use sys::windows::from_raw_arc::FromRawArc;
 use sys::windows::buffer_pool::BufferPool;
 
@@ -61,9 +61,7 @@ impl Selector {
         })
     }
 
-    pub fn select(&mut self,
-                  events: &mut Events,
-                  timeout_ms: Option<usize>) -> io::Result<()> {
+    pub fn select(&mut self, events: &mut Events, timeout_ms: Option<usize>) -> io::Result<()> {
         // If we have some deferred events then we only want to poll for I/O
         // events, so clamp the timeout to 0 in that case.
         let timeout = if !self.should_block() {
@@ -93,14 +91,11 @@ impl Selector {
 
         for status in events.statuses[..n].iter_mut() {
             if status.overlapped() as usize == 0 {
-                dst.push(IoEvent::new(EventSet::readable(),
-                                      Token(status.token())));
-                continue
+                dst.push(IoEvent::new(EventSet::readable(), Token(status.token())));
+                continue;
             }
 
-            let callback = unsafe {
-                (*(status.overlapped() as *mut Overlapped)).callback()
-            };
+            let callback = unsafe { (*(status.overlapped() as *mut Overlapped)).callback() };
 
             callback(status, dst);
         }
@@ -161,7 +156,9 @@ impl Registration {
         self.selector.as_ref().map(|s| &s.port)
     }
 
-    pub fn token(&self) -> Token { self.token }
+    pub fn token(&self) -> Token {
+        self.token
+    }
 
     pub fn get_buffer(&self, size: usize) -> Vec<u8> {
         match self.selector {
@@ -186,7 +183,12 @@ impl Registration {
     /// Eventually this function will probably also be modified to handle the
     /// `level()` polling option.
     pub fn push_event(&mut self, set: EventSet, events: &mut Vec<IoEvent>) {
-        trace!("push_event; token={:?}; set={:?}; opts={:?}", self.token, set, self.opts);
+        trace!(
+            "push_event; token={:?}; set={:?}; opts={:?}",
+            self.token,
+            set,
+            self.opts
+        );
 
         // If we're not actually interested in any of these events,
         // discard the event, and then if we're actually delivering an event we
@@ -204,8 +206,7 @@ impl Registration {
                     self.interest = EventSet::none();
                 }
             } else {
-                let selector = self.selector.as_ref()
-                    .expect("expected a selector");
+                let selector = self.selector.as_ref().expect("expected a selector");
 
                 let mut level = selector.level_triggered.lock().unwrap();
 
@@ -227,8 +228,12 @@ impl Registration {
         trace!("unset_readiness; token={:?}; set={:?}", self.token, set);
 
         if let Some(key) = self.key {
-            let mut map = self.selector.as_ref().expect("expected selector")
-                .level_triggered.lock().unwrap();
+            let mut map = self.selector
+                .as_ref()
+                .expect("expected selector")
+                .level_triggered
+                .lock()
+                .unwrap();
 
             if let Entry::Occupied(mut e) = map.entry(key) {
                 {
@@ -248,18 +253,25 @@ impl Registration {
         self.token = token;
     }
 
-    pub fn register_socket(&mut self,
-                           socket: &AsRawSocket,
-                           selector: &mut Selector,
-                           token: Token,
-                           interest: EventSet,
-                           opts: PollOpt) -> io::Result<()> {
+    pub fn register_socket(
+        &mut self,
+        socket: &AsRawSocket,
+        selector: &mut Selector,
+        token: Token,
+        interest: EventSet,
+        opts: PollOpt,
+    ) -> io::Result<()> {
         if self.selector.is_some() {
-            return Err(other("socket already registered"))
+            return Err(other("socket already registered"));
         }
 
         try!(Registration::validate_opts(opts));
-        try!(selector.inner.port.add_socket(self.token.as_usize(), socket));
+        try!(
+            selector
+                .inner
+                .port
+                .add_socket(self.token.as_usize(), socket)
+        );
         self.associate(selector, token);
 
         if opts.is_level() {
@@ -271,16 +283,18 @@ impl Registration {
         Ok(())
     }
 
-    pub fn reregister_socket(&mut self,
-                             _socket: &AsRawSocket,
-                             _selector: &mut Selector,
-                             token: Token,
-                             interest: EventSet,
-                             opts: PollOpt) -> io::Result<()> {
+    pub fn reregister_socket(
+        &mut self,
+        _socket: &AsRawSocket,
+        _selector: &mut Selector,
+        token: Token,
+        interest: EventSet,
+        opts: PollOpt,
+    ) -> io::Result<()> {
         if self.selector.is_none() {
-            return Err(other("socket not registered"))
+            return Err(other("socket not registered"));
         } else if self.token != token {
-            return Err(other("cannot change token values on reregistration"))
+            return Err(other("cannot change token values on reregistration"));
         }
         try!(Registration::validate_opts(opts));
         // TODO: assert that self.selector == selector?
@@ -301,8 +315,13 @@ impl Registration {
 
         if let Some(key) = self.key {
             self.key = None;
-            self.selector.as_ref().expect("expected selector")
-                .level_triggered.lock().unwrap().remove(&key);
+            self.selector
+                .as_ref()
+                .expect("expected selector")
+                .level_triggered
+                .lock()
+                .unwrap()
+                .remove(&key);
         }
     }
 
@@ -433,8 +452,10 @@ impl Overlapped {
         &mut *self.inner.get()
     }
 
-    pub unsafe fn cast_to_arc<T>(overlapped: *mut miow::Overlapped,
-                                 offset: usize) -> FromRawArc<T> {
+    pub unsafe fn cast_to_arc<T>(
+        overlapped: *mut miow::Overlapped,
+        offset: usize,
+    ) -> FromRawArc<T> {
         debug_assert!(offset < mem::size_of::<T>());
         FromRawArc::from_raw((overlapped as usize - offset) as *mut T)
     }

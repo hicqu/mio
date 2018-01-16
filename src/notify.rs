@@ -1,6 +1,6 @@
-use {sys, Evented, EventSet, PollOpt, Selector, Token};
+use {sys, EventSet, Evented, PollOpt, Selector, Token};
 use util::BoundedQueue;
-use std::{fmt, cmp, io, error, any};
+use std::{any, cmp, error, fmt, io};
 use std::sync::Arc;
 use std::sync::atomic::AtomicIsize;
 use std::sync::atomic::Ordering::Relaxed;
@@ -14,14 +14,14 @@ const CLOSED: isize = -2;
 ///
 /// TODO: Use more efficient wake-up strategy if available
 pub struct Notify<M: Send> {
-    inner: Arc<NotifyInner<M>>
+    inner: Arc<NotifyInner<M>>,
 }
 
 impl<M: Send> Notify<M> {
     #[inline]
     pub fn with_capacity(capacity: usize) -> io::Result<Notify<M>> {
         Ok(Notify {
-            inner: Arc::new(try!(NotifyInner::with_capacity(capacity)))
+            inner: Arc::new(try!(NotifyInner::with_capacity(capacity))),
         })
     }
 
@@ -34,6 +34,12 @@ impl<M: Send> Notify<M> {
     pub fn notify(&self, value: M) -> Result<(), NotifyError<M>> {
         self.inner.notify(value)
     }
+
+    #[inline]
+    pub fn count(&self) -> usize {
+        self.inner.queue.count()
+    }
+
 
     #[inline]
     pub fn poll(&self) -> Option<M> {
@@ -54,7 +60,7 @@ impl<M: Send> Notify<M> {
 impl<M: Send> Clone for Notify<M> {
     fn clone(&self) -> Notify<M> {
         Notify {
-            inner: self.inner.clone()
+            inner: self.inner.clone(),
         }
     }
 }
@@ -65,13 +71,13 @@ impl<M: Send> fmt::Debug for Notify<M> {
     }
 }
 
-unsafe impl<M: Send> Sync for Notify<M> { }
-unsafe impl<M: Send> Send for Notify<M> { }
+unsafe impl<M: Send> Sync for Notify<M> {}
+unsafe impl<M: Send> Send for Notify<M> {}
 
 struct NotifyInner<M> {
     state: AtomicIsize,
     queue: BoundedQueue<M>,
-    awaken: sys::Awakener
+    awaken: sys::Awakener,
 }
 
 impl<M: Send> NotifyInner<M> {
@@ -79,7 +85,7 @@ impl<M: Send> NotifyInner<M> {
         Ok(NotifyInner {
             state: AtomicIsize::new(0),
             queue: BoundedQueue::with_capacity(capacity),
-            awaken: try!(sys::Awakener::new())
+            awaken: try!(sys::Awakener::new()),
         })
     }
 
@@ -153,8 +159,8 @@ impl<M: Send> NotifyInner<M> {
                     let _ = self.queue.pop();
                     return Err(NotifyError::Closed(None));
                 }
-                SLEEP => { 1 }
-                _ => { cur + 1 }
+                SLEEP => 1,
+                _ => cur + 1,
             };
 
             val = self.state.compare_and_swap(cur, nxt, Relaxed);
@@ -188,8 +194,17 @@ impl<M: Send> NotifyInner<M> {
 }
 
 impl<M: Send> Evented for Notify<M> {
-    fn register(&self, selector: &mut Selector, token: Token, interest: EventSet, opts: PollOpt) -> io::Result<()> {
-        assert!(opts.is_edge(), "awakener can only be registered using edge-triggered events");
+    fn register(
+        &self,
+        selector: &mut Selector,
+        token: Token,
+        interest: EventSet,
+        opts: PollOpt,
+    ) -> io::Result<()> {
+        assert!(
+            opts.is_edge(),
+            "awakener can only be registered using edge-triggered events"
+        );
         self.inner.awaken.register(selector, token, interest, opts)
     }
 
@@ -211,15 +226,9 @@ pub enum NotifyError<T> {
 impl<M> fmt::Debug for NotifyError<M> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            NotifyError::Io(ref e) => {
-                write!(fmt, "NotifyError::Io({:?})", e)
-            }
-            NotifyError::Full(..) => {
-                write!(fmt, "NotifyError::Full(..)")
-            }
-            NotifyError::Closed(..) => {
-                write!(fmt, "NotifyError::Closed(..)")
-            }
+            NotifyError::Io(ref e) => write!(fmt, "NotifyError::Io({:?})", e),
+            NotifyError::Full(..) => write!(fmt, "NotifyError::Full(..)"),
+            NotifyError::Closed(..) => write!(fmt, "NotifyError::Closed(..)"),
         }
     }
 }
@@ -227,11 +236,9 @@ impl<M> fmt::Debug for NotifyError<M> {
 impl<M> fmt::Display for NotifyError<M> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            NotifyError::Io(ref e) => {
-                write!(fmt, "IO error: {}", e)
-            }
+            NotifyError::Io(ref e) => write!(fmt, "IO error: {}", e),
             NotifyError::Full(..) => write!(fmt, "Full"),
-            NotifyError::Closed(..) => write!(fmt, "Closed")
+            NotifyError::Closed(..) => write!(fmt, "Closed"),
         }
     }
 }
@@ -241,14 +248,14 @@ impl<M: any::Any> error::Error for NotifyError<M> {
         match *self {
             NotifyError::Io(ref err) => err.description(),
             NotifyError::Closed(..) => "The receiving end has hung up",
-            NotifyError::Full(..) => "Queue is full"
+            NotifyError::Full(..) => "Queue is full",
         }
     }
 
     fn cause(&self) -> Option<&error::Error> {
         match *self {
             NotifyError::Io(ref err) => Some(err),
-            _ => None
+            _ => None,
         }
     }
 }

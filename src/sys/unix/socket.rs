@@ -1,12 +1,13 @@
-use {io};
+use io;
 use sys::unix::nix;
 use std::os::unix::io::AsRawFd;
 
-pub trait Socket : AsRawFd {
+pub trait Socket: AsRawFd {
     /// Returns the value for the `SO_LINGER` socket option.
     fn linger(&self) -> io::Result<usize> {
-        let linger = try!(nix::getsockopt(self.as_raw_fd(), nix::sockopt::Linger)
-            .map_err(super::from_nix_error));
+        let linger = try!(
+            nix::getsockopt(self.as_raw_fd(), nix::sockopt::Linger).map_err(super::from_nix_error)
+        );
 
         if linger.l_onoff > 0 {
             Ok(linger.l_onoff as usize)
@@ -19,7 +20,7 @@ pub trait Socket : AsRawFd {
     fn set_linger(&self, dur_s: usize) -> io::Result<()> {
         let linger = nix::linger {
             l_onoff: (if dur_s > 0 { 1 } else { 0 }) as nix::c_int,
-            l_linger: dur_s as nix::c_int
+            l_linger: dur_s as nix::c_int,
         };
 
         nix::setsockopt(self.as_raw_fd(), nix::sockopt::Linger, &linger)
@@ -37,7 +38,7 @@ pub trait Socket : AsRawFd {
     }
 
     fn set_tcp_nodelay(&self, val: bool) -> io::Result<()> {
-        nix::setsockopt(self.as_raw_fd(),  nix::sockopt::TcpNoDelay, &val)
+        nix::setsockopt(self.as_raw_fd(), nix::sockopt::TcpNoDelay, &val)
             .map_err(super::from_nix_error)
     }
 

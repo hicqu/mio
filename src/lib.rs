@@ -78,7 +78,6 @@
 //! event_loop.run(&mut MyHandler(server)).unwrap();
 //!
 //! ```
-
 #![crate_name = "mio"]
 #![cfg_attr(unix, deny(warnings))]
 
@@ -90,8 +89,6 @@ extern crate libc;
 #[cfg(unix)]
 extern crate nix;
 
-extern crate winapi;
-extern crate miow;
 extern crate net2;
 
 #[macro_use]
@@ -113,70 +110,25 @@ mod sys;
 mod timer;
 mod token;
 
-pub use event::{
-    PollOpt,
-    EventSet,
-    IoEvent,
-};
-pub use event_loop::{
-    EventLoop,
-    EventLoopConfig,
-    Sender,
-};
-pub use handler::{
-    Handler,
-};
-pub use io::{
-    TryRead,
-    TryWrite,
-    Evented,
-    TryAccept,
-};
-pub use net::{
-    tcp,
-    udp,
-    IpAddr,
-    Ipv4Addr,
-    Ipv6Addr,
-};
+pub use event::{EventSet, IoEvent, PollOpt};
+pub use event_loop::{EventLoop, EventLoopConfig, Sender};
+pub use handler::Handler;
+pub use io::{Evented, TryAccept, TryRead, TryWrite};
+pub use net::{tcp, udp, IpAddr, Ipv4Addr, Ipv6Addr};
 #[cfg(unix)]
 pub mod unix {
-    pub use net::unix::{
-        pipe,
-        PipeReader,
-        PipeWriter,
-        UnixListener,
-        UnixSocket,
-        UnixStream,
-    };
-    pub use sys::{
-        EventedFd,
-    };
+    pub use net::unix::{pipe, PipeReader, PipeWriter, UnixListener, UnixSocket, UnixStream};
+    pub use sys::EventedFd;
 }
 
-pub use notify::{
-    NotifyError,
-};
-pub use poll::{
-    Poll,
-    Events,
-};
-pub use timer::{
-    Timeout,
-    TimerError,
-    TimerResult
-};
-pub use token::{
-    Token,
-};
+pub use notify::NotifyError;
+pub use poll::{Events, Poll};
+pub use timer::{Timeout, TimerError, TimerResult};
+pub use token::Token;
 #[cfg(unix)]
 pub use sys::Io;
 pub use sys::Selector;
 
 pub mod prelude {
-    pub use super::{
-        EventLoop,
-        TryRead,
-        TryWrite,
-    };
+    pub use super::{EventLoop, TryRead, TryWrite};
 }

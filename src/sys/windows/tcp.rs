@@ -1,5 +1,5 @@
 use std::fmt;
-use std::io::{self, Read, Write, Cursor};
+use std::io::{self, Cursor, Read, Write};
 use std::mem;
 use std::net::{self, SocketAddr};
 use std::os::windows::prelude::*;
@@ -11,7 +11,7 @@ use miow::iocp::CompletionStatus;
 use miow::net::*;
 use winapi::*;
 
-use {Evented, EventSet, PollOpt, Selector, Token};
+use {EventSet, Evented, PollOpt, Selector, Token};
 use event::IoEvent;
 use sys::windows::selector::{Overlapped, Registration};
 use sys::windows::{wouldblock, Family};
@@ -77,15 +77,14 @@ struct ListenerInner {
 }
 
 enum State<T, U> {
-    Empty,              // no I/O operation in progress
-    Pending(T),         // an I/O operation is in progress
-    Ready(U),           // I/O has finished with this value
-    Error(io::Error),   // there was an I/O error
+    Empty,            // no I/O operation in progress
+    Pending(T),       // an I/O operation is in progress
+    Ready(U),         // I/O has finished with this value
+    Error(io::Error), // there was an I/O error
 }
 
 impl TcpStream {
-    fn new(socket: net::TcpStream,
-           deferred_connect: Option<SocketAddr>) -> TcpStream {
+    fn new(socket: net::TcpStream, deferred_connect: Option<SocketAddr>) -> TcpStream {
         TcpStream {
             imp: StreamImp {
                 inner: FromRawArc::new(StreamIo {
@@ -103,8 +102,7 @@ impl TcpStream {
         }
     }
 
-    pub fn connect(socket: net::TcpStream, addr: &SocketAddr)
-                   -> io::Result<TcpStream> {
+    pub fn connect(socket: net::TcpStream, addr: &SocketAddr) -> io::Result<TcpStream> {
         Ok(TcpStream::new(socket, Some(*addr)))
     }
 
@@ -117,7 +115,10 @@ impl TcpStream {
     }
 
     pub fn try_clone(&self) -> io::Result<TcpStream> {
-        self.inner().socket.try_clone().map(|s| TcpStream::new(s, None))
+        self.inner()
+            .socket
+            .try_clone()
+            .map(|s| TcpStream::new(s, None))
     }
 
     pub fn shutdown(&self, how: Shutdown) -> io::Result<()> {
@@ -134,11 +135,9 @@ impl TcpStream {
     }
 
     pub fn take_socket_error(&self) -> io::Result<()> {
-        net2::TcpStreamExt::take_error(&self.inner().socket).and_then(|e| {
-            match e {
-                Some(e) => Err(e),
-                None => Ok(())
-            }
+        net2::TcpStreamExt::take_error(&self.inner().socket).and_then(|e| match e {
+            Some(e) => Err(e),
+            None => Ok(()),
         })
     }
 
@@ -167,11 +166,13 @@ impl StreamImp {
         self.inner.inner.lock().unwrap()
     }
 
-    fn schedule_connect(&self, addr: &SocketAddr, me: &mut StreamInner)
-                        -> io::Result<()> {
+    fn schedule_connect(&self, addr: &SocketAddr, me: &mut StreamInner) -> io::Result<()> {
         unsafe {
             trace!("scheduling a connect");
-            try!(me.socket.connect_overlapped(addr, self.inner.read.get_mut()));
+            try!(
+                me.socket
+                    .connect_overlapped(addr, self.inner.read.get_mut())
+            );
         }
         // see docs above on StreamImp.inner for rationale on forget
         mem::forget(self.clone());
@@ -199,7 +200,8 @@ impl StreamImp {
             trace!("scheduling a read");
             let cap = buf.capacity();
             buf.set_len(cap);
-            me.socket.read_overlapped(&mut buf, self.inner.read.get_mut())
+            me.socket
+                .read_overlapped(&mut buf, self.inner.read.get_mut())
         };
         match res {
             Ok(_) => {
@@ -230,15 +232,15 @@ impl StreamImp {
     ///
     /// A new writable event (e.g. allowing another write) will only happen once
     /// the buffer has been written completely (or hit an error).
-    fn schedule_write(&self, buf: Vec<u8>, pos: usize,
-                      me: &mut StreamInner) {
+    fn schedule_write(&self, buf: Vec<u8>, pos: usize, me: &mut StreamInner) {
 
         // About to write, clear any pending level triggered events
         me.iocp.unset_readiness(EventSet::writable());
 
         trace!("scheduling a write");
         let err = unsafe {
-            me.socket.write_overlapped(&buf[pos..], self.inner.write.get_mut())
+            me.socket
+                .write_overlapped(&buf[pos..], self.inner.write.get_mut())
         };
         match err {
             Ok(_) => {
@@ -259,8 +261,7 @@ impl StreamImp {
     /// When an event is generated on this socket, if it happened after the
     /// socket was closed then we don't want to actually push the event onto our
     /// selector as otherwise it's just a spurious notification.
-    fn push(&self, me: &mut StreamInner, set: EventSet,
-            into: &mut Vec<IoEvent>) {
+    fn push(&self, me: &mut StreamInner, set: EventSet, into: &mut Vec<IoEvent>) {
         if me.socket.as_raw_socket() != INVALID_SOCKET {
             me.iocp.push_event(set, into);
         }
@@ -291,7 +292,7 @@ fn read_done(status: &CompletionStatus, dst: &mut Vec<IoEvent>) {
                 e = e | EventSet::hup();
             }
 
-            return me2.push(&mut me, e, dst)
+            return me2.push(&mut me, e, dst);
         }
         s => me.read = s,
     }
@@ -357,11 +358,11 @@ impl Write for TcpStream {
 
         match me.write {
             State::Empty => {}
-            _ => return Err(wouldblock())
+            _ => return Err(wouldblock()),
         }
 
         if me.iocp.port().is_none() {
-            return Err(wouldblock())
+            return Err(wouldblock());
         }
 
         let mut intermediate = me.iocp.get_buffer(64 * 1024);
@@ -376,31 +377,45 @@ impl Write for TcpStream {
 }
 
 impl Evented for TcpStream {
-    fn register(&self, selector: &mut Selector, token: Token,
-                interest: EventSet, opts: PollOpt) -> io::Result<()> {
+    fn register(
+        &self,
+        selector: &mut Selector,
+        token: Token,
+        interest: EventSet,
+        opts: PollOpt,
+    ) -> io::Result<()> {
         let mut me = self.inner();
         let me = &mut *me;
-        try!(me.iocp.register_socket(&me.socket, selector, token, interest,
-                                     opts));
+        try!(
+            me.iocp
+                .register_socket(&me.socket, selector, token, interest, opts)
+        );
 
         // If we were connected before being registered process that request
         // here and go along our merry ways. Note that the callback for a
         // successful connect will worry about generating writable/readable
         // events and scheduling a new read.
         if let Some(addr) = me.deferred_connect.take() {
-            return self.imp.schedule_connect(&addr, me).map(|_| ())
+            return self.imp.schedule_connect(&addr, me).map(|_| ());
         }
         self.post_register(interest, me);
         Ok(())
     }
 
-    fn reregister(&self, selector: &mut Selector, token: Token,
-                  interest: EventSet, opts: PollOpt) -> io::Result<()> {
+    fn reregister(
+        &self,
+        selector: &mut Selector,
+        token: Token,
+        interest: EventSet,
+        opts: PollOpt,
+    ) -> io::Result<()> {
         let mut me = self.inner();
         {
             let me = &mut *me;
-            try!(me.iocp.reregister_socket(&me.socket, selector, token,
-                                           interest, opts));
+            try!(
+                me.iocp
+                    .reregister_socket(&me.socket, selector, token, interest, opts)
+            );
         }
         self.post_register(interest, &mut me);
         Ok(())
@@ -428,9 +443,7 @@ impl Drop for TcpStream {
         // This is achieved by replacing our socket with an invalid one, so all
         // further operations will return an error (but no further operations
         // should be done anyway).
-        inner.socket = unsafe {
-            net::TcpStream::from_raw_socket(INVALID_SOCKET)
-        };
+        inner.socket = unsafe { net::TcpStream::from_raw_socket(INVALID_SOCKET) };
 
         // Then run any finalization code including level notifications
         inner.iocp.deregister();
@@ -438,12 +451,14 @@ impl Drop for TcpStream {
 }
 
 impl TcpListener {
-    pub fn new(socket: net::TcpListener, addr: &SocketAddr)
-               -> io::Result<TcpListener> {
-        Ok(TcpListener::new_family(socket, match *addr {
-            SocketAddr::V4(..) => Family::V4,
-            SocketAddr::V6(..) => Family::V6,
-        }))
+    pub fn new(socket: net::TcpListener, addr: &SocketAddr) -> io::Result<TcpListener> {
+        Ok(TcpListener::new_family(
+            socket,
+            match *addr {
+                SocketAddr::V4(..) => Family::V4,
+                SocketAddr::V6(..) => Family::V6,
+            },
+        ))
     }
 
     fn new_family(socket: net::TcpListener, family: Family) -> TcpListener {
@@ -470,17 +485,15 @@ impl TcpListener {
             State::Empty => return Ok(None),
             State::Pending(t) => {
                 me.accept = State::Pending(t);
-                return Ok(None)
+                return Ok(None);
             }
-            State::Ready((s, a)) => {
-                Ok(Some((TcpStream::new(s, None), a)))
-            }
+            State::Ready((s, a)) => Ok(Some((TcpStream::new(s, None), a))),
             State::Error(e) => Err(e),
         };
 
         self.imp.schedule_accept(&mut me);
 
-        return ret
+        return ret;
     }
 
     pub fn local_addr(&self) -> io::Result<SocketAddr> {
@@ -489,17 +502,16 @@ impl TcpListener {
 
     pub fn try_clone(&self) -> io::Result<TcpListener> {
         let inner = self.inner();
-        inner.socket.try_clone().map(|s| {
-            TcpListener::new_family(s, inner.family)
-        })
+        inner
+            .socket
+            .try_clone()
+            .map(|s| TcpListener::new_family(s, inner.family))
     }
 
     pub fn take_socket_error(&self) -> io::Result<()> {
-        net2::TcpListenerExt::take_error(&self.inner().socket).and_then(|e| {
-            match e {
-                Some(e) => Err(e),
-                None => Ok(())
-            }
+        net2::TcpListenerExt::take_error(&self.inner().socket).and_then(|e| match e {
+            Some(e) => Err(e),
+            None => Ok(()),
         })
     }
 
@@ -516,7 +528,7 @@ impl ListenerImp {
     fn schedule_accept(&self, me: &mut ListenerInner) {
         match me.accept {
             State::Empty => {}
-            _ => return
+            _ => return,
         }
 
         me.iocp.unset_readiness(EventSet::readable());
@@ -526,8 +538,8 @@ impl ListenerImp {
             Family::V6 => TcpBuilder::new_v6(),
         }.and_then(|builder| unsafe {
             trace!("scheduling an accept");
-            me.socket.accept_overlapped(&builder, &mut me.accept_buf,
-                                        self.inner.accept.get_mut())
+            me.socket
+                .accept_overlapped(&builder, &mut me.accept_buf, self.inner.accept.get_mut())
         });
         match res {
             Ok((socket, _)) => {
@@ -543,8 +555,7 @@ impl ListenerImp {
     }
 
     // See comments in StreamImp::push
-    fn push(&self, me: &mut ListenerInner, set: EventSet,
-            into: &mut Vec<IoEvent>) {
+    fn push(&self, me: &mut ListenerInner, set: EventSet, into: &mut Vec<IoEvent>) {
         if me.socket.as_raw_socket() != INVALID_SOCKET {
             me.iocp.push_event(set, into);
         }
@@ -570,22 +581,36 @@ fn accept_done(status: &CompletionStatus, dst: &mut Vec<IoEvent>) {
 }
 
 impl Evented for TcpListener {
-    fn register(&self, selector: &mut Selector, token: Token,
-                interest: EventSet, opts: PollOpt) -> io::Result<()> {
+    fn register(
+        &self,
+        selector: &mut Selector,
+        token: Token,
+        interest: EventSet,
+        opts: PollOpt,
+    ) -> io::Result<()> {
         let mut me = self.inner();
         let me = &mut *me;
-        try!(me.iocp.register_socket(&me.socket, selector, token, interest,
-                                     opts));
+        try!(
+            me.iocp
+                .register_socket(&me.socket, selector, token, interest, opts)
+        );
         self.imp.schedule_accept(me);
         Ok(())
     }
 
-    fn reregister(&self, selector: &mut Selector, token: Token,
-                  interest: EventSet, opts: PollOpt) -> io::Result<()> {
+    fn reregister(
+        &self,
+        selector: &mut Selector,
+        token: Token,
+        interest: EventSet,
+        opts: PollOpt,
+    ) -> io::Result<()> {
         let mut me = self.inner();
         let me = &mut *me;
-        try!(me.iocp.reregister_socket(&me.socket, selector, token,
-                                       interest, opts));
+        try!(
+            me.iocp
+                .reregister_socket(&me.socket, selector, token, interest, opts)
+        );
         self.imp.schedule_accept(me);
         Ok(())
     }
@@ -606,9 +631,7 @@ impl Drop for TcpListener {
         let mut inner = self.inner();
 
         // See comments in TcpStream
-        inner.socket = unsafe {
-            net::TcpListener::from_raw_socket(INVALID_SOCKET)
-        };
+        inner.socket = unsafe { net::TcpListener::from_raw_socket(INVALID_SOCKET) };
 
         // Then run any finalization code including level notifications
         inner.iocp.deregister();

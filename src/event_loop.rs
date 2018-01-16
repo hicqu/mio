@@ -1,8 +1,8 @@
-use {Handler, Evented, Poll, NotifyError, Token};
-use event::{IoEvent, EventSet, PollOpt};
+use {Evented, Handler, NotifyError, Poll, Token};
+use event::{EventSet, IoEvent, PollOpt};
 use notify::Notify;
-use timer::{Timer, Timeout, TimerResult};
-use std::{cmp, io, fmt, thread, usize};
+use timer::{Timeout, Timer, TimerResult};
+use std::{cmp, fmt, io, thread, usize};
 use std::default::Default;
 
 /// Configure EventLoop runtime details
@@ -85,7 +85,6 @@ pub struct EventLoop<H: Handler> {
 const NOTIFY: Token = Token(usize::MAX);
 
 impl<H: Handler> EventLoop<H> {
-
     /// Initializes a new event loop using default configuration settings. The
     /// event loop will not be running yet.
     pub fn new() -> io::Result<EventLoop<H>> {
@@ -100,13 +99,19 @@ impl<H: Handler> EventLoop<H> {
         let mut timer = Timer::new(
             config.timer_tick_ms,
             config.timer_wheel_size,
-            config.timer_capacity);
+            config.timer_capacity,
+        );
 
         // Create cross thread notification queue
         let notify = try!(Notify::with_capacity(config.notify_capacity));
 
         // Register the notification wakeup FD with the IO poller
-        try!(poll.register(&notify, NOTIFY, EventSet::readable() | EventSet::writable() , PollOpt::edge()));
+        try!(poll.register(
+            &notify,
+            NOTIFY,
+            EventSet::readable() | EventSet::writable(),
+            PollOpt::edge()
+        ));
 
         // Set the timer's starting time reference point
         timer.setup();
@@ -224,15 +229,29 @@ impl<H: Handler> EventLoop<H> {
     }
 
     /// Registers an IO handle with the event loop.
-    pub fn register<E: ?Sized>(&mut self, io: &E, token: Token, interest: EventSet, opt: PollOpt) -> io::Result<()>
-        where E: Evented
+    pub fn register<E: ?Sized>(
+        &mut self,
+        io: &E,
+        token: Token,
+        interest: EventSet,
+        opt: PollOpt,
+    ) -> io::Result<()>
+    where
+        E: Evented,
     {
         self.poll.register(io, token, interest, opt)
     }
 
     /// Re-Registers an IO handle with the event loop.
-    pub fn reregister<E: ?Sized>(&mut self, io: &E, token: Token, interest: EventSet, opt: PollOpt) -> io::Result<()>
-        where E: Evented
+    pub fn reregister<E: ?Sized>(
+        &mut self,
+        io: &E,
+        token: Token,
+        interest: EventSet,
+        opt: PollOpt,
+    ) -> io::Result<()>
+    where
+        E: Evented,
     {
         self.poll.reregister(io, token, interest, opt)
     }
@@ -251,7 +270,10 @@ impl<H: Handler> EventLoop<H> {
     }
 
     /// Deregisters an IO handle with the event loop.
-    pub fn deregister<E: ?Sized>(&mut self, io: &E) -> io::Result<()> where E: Evented {
+    pub fn deregister<E: ?Sized>(&mut self, io: &E) -> io::Result<()>
+    where
+        E: Evented,
+    {
         self.poll.deregister(io)
     }
 
@@ -278,14 +300,12 @@ impl<H: Handler> EventLoop<H> {
         // one second before it takes effect.
         let events = match self.io_poll(timeout_ms) {
             Ok(e) => e,
-            Err(err) => {
-                if err.kind() == io::ErrorKind::Interrupted {
-                    handler.interrupted(self);
-                    0
-                } else {
-                    return Err(err);
-                }
-            }
+            Err(err) => if err.kind() == io::ErrorKind::Interrupted {
+                handler.interrupted(self);
+                0
+            } else {
+                return Err(err);
+            },
         };
 
         if !pending {
@@ -304,7 +324,8 @@ impl<H: Handler> EventLoop<H> {
 
     #[inline]
     fn io_poll(&mut self, timeout: Option<usize>) -> io::Result<usize> {
-        let next_tick = self.timer.next_tick_in_ms()
+        let next_tick = self.timer
+            .next_tick_in_ms()
             .map(|ms| cmp::min(ms, usize::MAX as u64) as usize);
 
         let timeout = match (timeout, next_tick) {
@@ -332,7 +353,7 @@ impl<H: Handler> EventLoop<H> {
 
             match evt.token {
                 NOTIFY => self.notify.cleanup(),
-                _ => self.io_event(handler, evt)
+                _ => self.io_event(handler, evt),
             }
 
             i += 1;
@@ -349,7 +370,7 @@ impl<H: Handler> EventLoop<H> {
                 Some(msg) => {
                     handler.notify(self, msg);
                     cnt -= 1;
-                },
+                }
                 // If we expect messages, but the queue seems empty, a context
                 // switch has occurred in the queue's push() method between
                 // reserving a slot and marking that slot; let's spin for
@@ -366,15 +387,15 @@ impl<H: Handler> EventLoop<H> {
         loop {
             match self.timer.tick_to(now) {
                 Some(t) => handler.timeout(self, t),
-                _ => return
+                _ => return,
             }
         }
     }
 }
 
-unsafe impl<H: Handler> Sync for EventLoop<H> { }
+unsafe impl<H: Handler> Sync for EventLoop<H> {}
 
-impl <H: Handler> Drop for EventLoop<H> {
+impl<H: Handler> Drop for EventLoop<H> {
     fn drop(&mut self) {
         self.notify.close();
     }
@@ -382,12 +403,14 @@ impl <H: Handler> Drop for EventLoop<H> {
 
 /// Sends messages to the EventLoop from other threads.
 pub struct Sender<M: Send> {
-    notify: Notify<M>
+    notify: Notify<M>,
 }
 
 impl<M: Send> Clone for Sender<M> {
     fn clone(&self) -> Sender<M> {
-        Sender { notify: self.notify.clone() }
+        Sender {
+            notify: self.notify.clone(),
+        }
     }
 }
 
@@ -397,7 +420,7 @@ impl<M: Send> fmt::Debug for Sender<M> {
     }
 }
 
-unsafe impl<M: Send> Sync for Sender<M> { }
+unsafe impl<M: Send> Sync for Sender<M> {}
 
 impl<M: Send> Sender<M> {
     fn new(notify: Notify<M>) -> Sender<M> {
@@ -406,6 +429,10 @@ impl<M: Send> Sender<M> {
 
     pub fn send(&self, msg: M) -> Result<(), NotifyError<M>> {
         self.notify.notify(msg)
+    }
+
+    pub fn count(&self) -> usize {
+        self.notify.count()
     }
 }
 
@@ -417,8 +444,8 @@ mod tests {
     use std::sync::atomic::AtomicIsize;
     use std::sync::atomic::Ordering::SeqCst;
     use super::EventLoop;
-    use {unix, Handler, Token, TryRead, TryWrite, EventSet, PollOpt};
-    use bytes::{Buf, SliceBuf, ByteBuf};
+    use {unix, EventSet, Handler, PollOpt, Token, TryRead, TryWrite};
+    use bytes::{Buf, ByteBuf, SliceBuf};
 
     #[test]
     pub fn test_event_loop_size() {
@@ -428,14 +455,14 @@ mod tests {
 
     struct Funtimes {
         rcount: Arc<AtomicIsize>,
-        wcount: Arc<AtomicIsize>
+        wcount: Arc<AtomicIsize>,
     }
 
     impl Funtimes {
         fn new(rcount: Arc<AtomicIsize>, wcount: Arc<AtomicIsize>) -> Funtimes {
             Funtimes {
                 rcount: rcount,
-                wcount: wcount
+                wcount: wcount,
             }
         }
     }
@@ -467,9 +494,12 @@ mod tests {
         let wcount = Arc::new(AtomicIsize::new(0));
         let mut handler = Funtimes::new(rcount.clone(), wcount.clone());
 
-        writer.try_write_buf(&mut SliceBuf::wrap("hello".as_bytes())).unwrap();
-        event_loop.register(&reader, Token(10), EventSet::readable(),
-                            PollOpt::edge()).unwrap();
+        writer
+            .try_write_buf(&mut SliceBuf::wrap("hello".as_bytes()))
+            .unwrap();
+        event_loop
+            .register(&reader, Token(10), EventSet::readable(), PollOpt::edge())
+            .unwrap();
 
         let _ = event_loop.run_once(&mut handler, None);
         let mut b = ByteBuf::mut_with_capacity(16);

@@ -1,9 +1,9 @@
 use std::io::{Read, Write};
-use std::net::{self, SocketAddr, SocketAddrV4, SocketAddrV6, Ipv4Addr, Ipv6Addr};
+use std::net::{self, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 
 use net2::TcpBuilder;
 
-use {io, sys, Evented, EventSet, PollOpt, Selector, Token, TryAccept};
+use {io, sys, EventSet, Evented, PollOpt, Selector, Token, TryAccept};
 
 /*
  *
@@ -59,8 +59,7 @@ impl TcpStream {
     ///   loop. Note that on Windows you must `bind` a socket before it can be
     ///   connected, so if a custom `TcpBuilder` is used it should be bound
     ///   (perhaps to `INADDR_ANY`) before this method is called.
-    pub fn connect_stream(stream: net::TcpStream,
-                          addr: &SocketAddr) -> io::Result<TcpStream> {
+    pub fn connect_stream(stream: net::TcpStream, addr: &SocketAddr) -> io::Result<TcpStream> {
         Ok(TcpStream {
             sys: try!(sys::TcpStream::connect(stream, addr)),
         })
@@ -126,13 +125,23 @@ impl Write for TcpStream {
 }
 
 impl Evented for TcpStream {
-    fn register(&self, selector: &mut Selector, token: Token,
-                interest: EventSet, opts: PollOpt) -> io::Result<()> {
+    fn register(
+        &self,
+        selector: &mut Selector,
+        token: Token,
+        interest: EventSet,
+        opts: PollOpt,
+    ) -> io::Result<()> {
         self.sys.register(selector, token, interest, opts)
     }
 
-    fn reregister(&self, selector: &mut Selector, token: Token,
-                  interest: EventSet, opts: PollOpt) -> io::Result<()> {
+    fn reregister(
+        &self,
+        selector: &mut Selector,
+        token: Token,
+        interest: EventSet,
+        opts: PollOpt,
+    ) -> io::Result<()> {
         self.sys.reregister(selector, token, interest, opts)
     }
 
@@ -196,8 +205,7 @@ impl TcpListener {
     /// loop.
     ///
     /// The address provided must be the address that the listener is bound to.
-    pub fn from_listener(listener: net::TcpListener, addr: &SocketAddr)
-                         -> io::Result<TcpListener> {
+    pub fn from_listener(listener: net::TcpListener, addr: &SocketAddr) -> io::Result<TcpListener> {
         sys::TcpListener::new(listener, addr).map(|s| TcpListener { sys: s })
     }
 
@@ -207,7 +215,9 @@ impl TcpListener {
     /// will be ready at a later point. If an accepted stream is returned, the
     /// address of the peer is returned along with it
     pub fn accept(&self) -> io::Result<Option<(TcpStream, SocketAddr)>> {
-        self.sys.accept().map(|o| o.map(|(s, a)| (TcpStream { sys: s }, a)))
+        self.sys
+            .accept()
+            .map(|o| o.map(|(s, a)| (TcpStream { sys: s }, a)))
     }
 
     pub fn local_addr(&self) -> io::Result<SocketAddr> {
@@ -224,13 +234,23 @@ impl TcpListener {
 }
 
 impl Evented for TcpListener {
-    fn register(&self, selector: &mut Selector, token: Token,
-                interest: EventSet, opts: PollOpt) -> io::Result<()> {
+    fn register(
+        &self,
+        selector: &mut Selector,
+        token: Token,
+        interest: EventSet,
+        opts: PollOpt,
+    ) -> io::Result<()> {
         self.sys.register(selector, token, interest, opts)
     }
 
-    fn reregister(&self, selector: &mut Selector, token: Token,
-                  interest: EventSet, opts: PollOpt) -> io::Result<()> {
+    fn reregister(
+        &self,
+        selector: &mut Selector,
+        token: Token,
+        interest: EventSet,
+        opts: PollOpt,
+    ) -> io::Result<()> {
         self.sys.reregister(selector, token, interest, opts)
     }
 
@@ -266,7 +286,9 @@ impl AsRawFd for TcpStream {
 #[cfg(unix)]
 impl FromRawFd for TcpStream {
     unsafe fn from_raw_fd(fd: RawFd) -> TcpStream {
-        TcpStream { sys: FromRawFd::from_raw_fd(fd) }
+        TcpStream {
+            sys: FromRawFd::from_raw_fd(fd),
+        }
     }
 }
 
@@ -280,6 +302,8 @@ impl AsRawFd for TcpListener {
 #[cfg(unix)]
 impl FromRawFd for TcpListener {
     unsafe fn from_raw_fd(fd: RawFd) -> TcpListener {
-        TcpListener { sys: FromRawFd::from_raw_fd(fd) }
+        TcpListener {
+            sys: FromRawFd::from_raw_fd(fd),
+        }
     }
 }
